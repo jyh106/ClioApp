@@ -1,18 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ScrollView, StyleSheet, Text, TextInput, View, TouchableOpacity } from 'react-native';
+import { ScrollView, TextInput, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Message from './components/Message';
+import uuid from 'react-native-uuid';
+import styles from './styles';
 import RSAKey from 'react-native-rsa';
+import { RSA_BITS, RSA_EXPONENT } from './constants';
 
-const bits = 1024;
-const exponent = '10001'; // must be a string. This is hex string. decimal = 65537
 var rsa = new RSAKey();
-rsa.generate(bits, exponent);
+rsa.generate(RSA_BITS, RSA_EXPONENT);
+
 
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
+  const [messagesInTransit, setMessagesInTransit] = useState([]);
+  const [messagesFailed, setMessagesFailed] = useState([]);
 
+  const textInputRef = useRef(null);
+
+  // TODO - retrieve from keychain
   // var publicKey = rsa.getPublicString(); // return json encoded string
   // var privateKey = rsa.getPrivateString(); // return json encoded string
   const publicKey = JSON.stringify({"n":"8f4ecb32bfca88c7aa005f950523e7642e7385fea855e90f358803e764ee964cfa871f87c51f949c9f3965e222814d3db90ea52c90a7237bf7a227b6a244e4730c91a65a08fa7c789ccbec59b7053046e96a2c98af1f6e5db45a9d21e896708a6d2c807a2d2a538197ab6856d4f09a72fe5fad5da7b62aeccf90b05166b1fee1","e":"10001"});
@@ -22,6 +30,7 @@ export default function App() {
     async function fetchMessages() {
       console.log('fetching messages......');
       await getMessages();
+      console.log('done fetching messages....');
     }
     fetchMessages();
   }, []);
@@ -32,49 +41,79 @@ export default function App() {
     .then(response => response.json())
     .then(data => {
       const messages = [];
+      rsa.setPrivateString(privateKey);
       for (index in data) {
-          rsa.setPrivateString(privateKey);
-          const decryptedMessage = rsa.decrypt(data[index]);
-          messages.push(decryptedMessage);
-          setMessages(messages);
-        }
-      })
-      .catch(error => {
-        console.error(error);
-      });
+        const messageData = data[index];
+        const decryptedMessage = rsa.decrypt(messageData.message);
+        messages.push({
+          id: messageData.id,
+          message: decryptedMessage,
+        });
+      }
+      console.log(messages);
+      setMessages(messages);
+    })
+    .catch(error => {
+      console.error(error);
+    });
   };
   
   const onChangeText = (value) => {
     setText(value);
   };
+
   
-  const onSend = (e) => {
-    const updatedMessages = [...messages, text];
+  const onSend = async (text) => {
+    const msgId = uuid.v1();
+    const updatedMessages = [...messages, {message: text, id: msgId}];
+    setMessages(updatedMessages);
+    textInputRef.current.clear();
+    setMessagesInTransit([...messagesInTransit, msgId]);
+
     rsa.setPublicString(publicKey);
     var encrypted = rsa.encrypt(text);
-    // TODO send post request to BE
-    setMessages(updatedMessages);
-    setText('');
-  };
+    await fetch('http://127.0.0.1:3000/msg', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({'message': encrypted, id: msgId}),
+    })
+    .then(() => {
+      // remove msg id from state 
+      const updatedMessagesInTransit = messagesInTransit.filter((id) => id === msgId);
+      setMessagesInTransit(updatedMessagesInTransit);
+    })
+    .catch(() => {
+      const updatedMessagesFailed = [...messagesFailed, {id: msgId, message: text}];
+      setMessagesFailed(updatedMessagesFailed);
+    });
+
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="auto" />
       <ScrollView style={styles.messagesContainer}>
-        {messages.map((message, index) => (
-          <View style={styles.textContainer} key={index}>
-            <Text style={styles.text}>
-              {message}
-            </Text>
-          </View>
-        ))}
+        {messages.map(({message, id}) => 
+          <Message 
+            text={message} 
+            key={id} 
+            resend={(text) => console.log(`trying to resend message - ${text} `)}
+            isSending={messagesInTransit.includes(id)}
+            isSendSuccessful={!messagesInTransit.includes(id) && !messagesFailed.includes(id)}
+          />
+        )}
       </ScrollView>
       <View style={styles.sendContainer}>
         <TextInput 
           placeholder='record your day'
           style={styles.inputBox}
           onChangeText={onChangeText}
+          ref={textInputRef}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={onSend}>
+        <TouchableOpacity style={styles.sendButton} onPress={() => onSend(text)}>
           <Ionicons name="send" size={20} color="white" />
         </TouchableOpacity>
       </View>
@@ -82,57 +121,4 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: "100%",
-  },
-  messagesContainer: {
-    height: "80%",
-    width: "96%",
-    marginTop: 40,
-    marginBottom: 1,
-    marginHorizontal: 40,
-  },
-  textContainer: {
-    backgroundColor: '#0490e0',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignSelf: 'flex-start',
-    marginVertical: 5,
-    maxWidth: '80%',
-  },
-  text: {
-    fontSize: 16,
-    color: '#ffffff'
-  },
-  sendContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'baseline',
-    marginBottom: 30,
-  },
-  inputBox: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 25,
-    height: 40,
-    paddingHorizontal: 10,
-    marginHorizontal: 10,
-    fontSize: 16,
-    flexGrow: 15,
-  },
-  sendButton: {
-    backgroundColor: '#1E90FF',
-    borderRadius: 30,
-    height: 40,
-    width: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexGrow: 1,
-    marginRight: 18,
-  },
-});
+
