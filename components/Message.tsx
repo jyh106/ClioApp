@@ -5,21 +5,30 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 interface MessageProps {
   text: string,
-  id: string
-  isSending?: boolean,
-  isSendSuccessful?: boolean,
-  isSendError?: boolean,
+  id: string,
+  timestamp: string,
+  messagesInTransit: string[],
+  messagesFailed: string[],
   resend?: (text:String) => void
 }
 
-function Message({text, isSendError, isSendSuccessful, isSending, id, resend } : MessageProps) {
+function Message({text, id, timestamp, resend,  messagesFailed, messagesInTransit} : MessageProps) {
   const isInlineStatus = text.split(' ').length <= 4;
+
+  const localDate = new Date(timestamp).toLocaleDateString();
+  const localTimestamp = new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const isSendSuccessful = !messagesFailed.includes(id) && !messagesInTransit.includes(id);
+  const isSendError = messagesFailed.includes(id);
+  const isSending = messagesInTransit.includes(id);
+
   return (
     <View style={isInlineStatus ? [styles.textContainer, styles.inlineStyle] : [styles.textContainer]} key={id}>
       <Text style={styles.text}>
         {text}
       </Text>
       <View style={isInlineStatus ? [styles.inlineStatus, styles.textStatus] : [styles.textStatus]}>
+        <Text style={styles.timestamp}>{localTimestamp}</Text>
         {isSendSuccessful && <AntDesign name="checkcircleo" size={10} color="white" />}
         {isSending && 
           <View style={styles.loadingWrapper}>
@@ -54,6 +63,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
   },
+  timestamp: {
+    color: '#ffffff',
+    fontSize: 9,
+    marginRight: 4,
+  },
   text: {
     fontSize: 16,
     color: '#ffffff'
@@ -61,7 +75,9 @@ const styles = StyleSheet.create({
   textStatus: {
     paddingTop: 1,
     display: 'flex',
-    alignItems: 'flex-end'
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   inlineStatus: {
     paddingLeft: 5,

@@ -15,7 +15,7 @@ rsa.generate(RSA_BITS, RSA_EXPONENT);
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
-  const [messagesInTransit, setMessagesInTransit] = useState([]);
+  const [messagesInTransit, setMessagesInTransit] = useState([]); // TODO - signal seems to be able to save this message on the phone; existing the app while a message is loading doesn't erase the message
   const [messagesFailed, setMessagesFailed] = useState([]);
 
   const textInputRef = useRef(null);
@@ -48,6 +48,7 @@ export default function App() {
         messages.push({
           id: messageData.id,
           message: decryptedMessage,
+          timestamp: messageData.timestamp,
         });
       }
       console.log(messages);
@@ -65,44 +66,51 @@ export default function App() {
   
   const onSend = async (text) => {
     const msgId = uuid.v1();
-    const updatedMessages = [...messages, {message: text, id: msgId}];
+    const msgTimestamp = new Date().toUTCString();
+    const updatedMessages = [...messages, {message: text, id: msgId, timestamp: msgTimestamp }];
     setMessages(updatedMessages);
     textInputRef.current.clear();
-    setMessagesInTransit([...messagesInTransit, msgId]);
+    const updatedInTransitMessages = [...messagesInTransit, msgId];
+    setMessagesInTransit(updatedInTransitMessages);
 
     rsa.setPublicString(publicKey);
     var encrypted = rsa.encrypt(text);
-    await fetch('http://127.0.0.1:3000/msg', {
+
+    console.log('sending msg');
+    fetch('http://127.0.0.1:3000/msg', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({'message': encrypted, id: msgId}),
+      body: JSON.stringify({'message': encrypted, id: msgId, timestamp: msgTimestamp}),
     })
+    .then(response => console.log(response.json()))
     .then(() => {
-      // remove msg id from state 
+      console.log('here', messagesInTransit);
       const updatedMessagesInTransit = messagesInTransit.filter((id) => id === msgId);
+      console.log('done sending message', updatedMessagesInTransit);
       setMessagesInTransit(updatedMessagesInTransit);
     })
     .catch(() => {
-      const updatedMessagesFailed = [...messagesFailed, {id: msgId, message: text}];
+      const updatedMessagesFailed = [...messagesFailed, id];
       setMessagesFailed(updatedMessagesFailed);
-    });
-
+    })
   }
 
   return (
     <View style={styles.container}>
       <StatusBar style="auto" />
       <ScrollView style={styles.messagesContainer}>
-        {messages.map(({message, id}) => 
+        {messages.map(({message, id, timestamp}) => 
           <Message 
             text={message} 
             key={id} 
-            resend={(text) => console.log(`trying to resend message - ${text} `)}
-            isSending={messagesInTransit.includes(id)}
-            isSendSuccessful={!messagesInTransit.includes(id) && !messagesFailed.includes(id)}
+            id={id}
+            timestamp={timestamp}
+            messagesInTransit={messagesInTransit}
+            messagesFailed={messagesFailed}
+            resend={(text) => console.log(`trying to resend message - ${text} `)} // TODO 
           />
         )}
       </ScrollView>
