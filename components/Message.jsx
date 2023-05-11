@@ -3,16 +3,16 @@ import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons'; 
 
-interface MessageProps {
-  text: string,
-  id: string,
-  timestamp: string,
-  messagesInTransit: string[],
-  messagesFailed: string[],
-  resend?: (text:String) => void
-}
+// interface MessageProps {
+//   text: string,
+//   id: string,
+//   timestamp: string,
+//   messagesInTransit: string[],
+//   messagesFailed: string[],
+//   resend?: (text:String) => void
+// }
 
-function Message({text, id, timestamp, resend,  messagesFailed, messagesInTransit} : MessageProps) {
+function Message({text, id, timestamp, resend,  messagesFailed, messagesInTransit}) {
   const isInlineStatus = text.split(' ').length <= 4;
 
   const localDate = new Date(timestamp).toLocaleDateString();
