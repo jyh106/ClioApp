@@ -50,7 +50,7 @@ function Message({text, id, timestamp, resend,  messagesFailed, messagesInTransi
 
 const styles = StyleSheet.create({
   textContainer: {
-    backgroundColor: '#0490e0',
+    backgroundColor: '#5ba4c4',
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
